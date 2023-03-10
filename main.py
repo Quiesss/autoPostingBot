@@ -56,8 +56,8 @@ async def main():
                         url=parse_inline_button[1].strip()
                     ))
             await bot.send_message(CHANNEL, message_split[0], entities=message.entities, reply_markup=builder.as_markup())
-        # else:
-            # await bot.send_message(CHANNEL, message.text, entities=message.entities)
+        else:
+            await bot.send_message(CHANNEL, message.text, entities=message.entities)
 
     await dp.start_polling(bot)
 
