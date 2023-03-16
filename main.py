@@ -19,6 +19,33 @@ async def main():
     bot = Bot(API_KEY, parse_mode="HTML")
     dp = Dispatcher()
 
+    @dp.message(F.voice)
+    async def send_audio(message: Message):
+        print(message)
+        message_split = message.caption.split('#') if message.caption else None
+        if message_split and len(message_split) == 2:
+            builder = InlineKeyboardBuilder()
+            button_split = message_split[1].split('\n')
+            for button in button_split:
+                parse_inline_button = button.split('|')
+                if len(parse_inline_button) == 2:
+                    builder.row(types.InlineKeyboardButton(
+                        text=parse_inline_button[0].strip(),
+                        url=parse_inline_button[1].strip()
+                    ))
+            await bot.send_voice(
+                CHANNEL,
+                voice=message.voice.file_id,
+                reply_markup=builder.as_markup(),
+                caption=(message_split[0])
+            )
+        else:
+            await bot.send_voice(
+                CHANNEL,
+                voice=message.voice.file_id,
+                caption=(message.caption if message.caption else '')
+            )
+
     @dp.message(F.video)
     async def send_video_note(message: Message):
         message_split = message.caption.split('%') if message.caption else None
