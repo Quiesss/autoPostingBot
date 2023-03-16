@@ -21,7 +21,6 @@ async def main():
 
     @dp.message(F.voice)
     async def send_audio(message: Message):
-        print(message)
         message_split = message.caption.split('#') if message.caption else None
         if message_split and len(message_split) == 2:
             builder = InlineKeyboardBuilder()
