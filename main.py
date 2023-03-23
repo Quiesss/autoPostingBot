@@ -1,23 +1,79 @@
 import asyncio
 import os
 import uuid
+from typing import Any, Awaitable, Callable, Dict, List, Union
 
-from aiogram import Bot, Dispatcher, F, types
-from aiogram.types import FSInputFile, input_file
+from aiogram import Bot, Dispatcher, F, types, BaseMiddleware
 
 from aiogram.types import (
+    InputMediaAudio,
+    InputMediaDocument,
+    InputMediaPhoto,
+    InputMediaVideo,
     Message,
+    TelegramObject,
+    FSInputFile
 )
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from conf import API_KEY, CHANNEL
 
 CHAT_ID_TO_SEND = CHANNEL
+DEFAULT_DELAY = 0.6
 
 
 async def main():
+    class MediaGroupMiddleware(BaseMiddleware):
+        ALBUM_DATA: Dict[str, List[Message]] = {}
+
+        def __init__(self, delay: Union[int, float] = DEFAULT_DELAY):
+            self.delay = delay
+
+        async def __call__(
+                self,
+                handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
+                event: Message,
+                data: Dict[str, Any],
+        ) -> Any:
+            if not event.media_group_id:
+                return await handler(event, data)
+
+            try:
+                self.ALBUM_DATA[event.media_group_id].append(event)
+                return  # Don't propagate the event
+            except KeyError:
+                self.ALBUM_DATA[event.media_group_id] = [event]
+                await asyncio.sleep(self.delay)
+                data["album"] = self.ALBUM_DATA.pop(event.media_group_id)
+
+            return await handler(event, data)
+
     bot = Bot(API_KEY, parse_mode="HTML")
     dp = Dispatcher()
+    dp.message.middleware(MediaGroupMiddleware())
+
+    @dp.message(F.media_group_id)
+    async def handle_albums(message: Message, album: List[Message]):
+        """This handler will receive a complete album of any type."""
+        group_elements = []
+        for element in album:
+            print(element.caption)
+            caption_kwargs = {"caption": element.caption, "caption_entities": element.caption_entities}
+            if element.photo:
+                input_media = InputMediaPhoto(media=element.photo[-1].file_id, **caption_kwargs, parse_mode=None)
+            elif element.video:
+                input_media = InputMediaVideo(media=element.video.file_id, **caption_kwargs, parse_mode=None)
+            elif element.document:
+                input_media = InputMediaDocument(media=element.document.file_id, **caption_kwargs, parse_mode=None)
+            elif element.audio:
+                input_media = InputMediaAudio(media=element.audio.file_id, **caption_kwargs)
+            else:
+                return message.answer("This media type isn't supported!")
+
+            group_elements.append(input_media)
+        await message.reply('Отправил альбом в канал, ожидайте')
+
+        return await bot.send_media_group(CHAT_ID_TO_SEND, media=group_elements)
 
     @dp.message(F.voice)
     async def send_audio(message: Message):
@@ -66,7 +122,7 @@ async def main():
                 caption=caption,
                 reply_markup=builder.as_markup()
             )
-            await message.reply('Отправил видео в чат')
+            await message.reply('Отправил видео в канал')
         else:
             file = await bot.get_file(message.video.file_id)
             uniq_name = str(uuid.uuid4()) + '.mp4'
@@ -76,7 +132,7 @@ async def main():
                 video_note=FSInputFile(uniq_name),
                 reply_markup=builder.as_markup()
             )
-            await message.reply('Отправил кружок в чат')
+            await message.reply('Отправил кружок в канал')
             os.remove(uniq_name)
 
     @dp.message(F.text)
@@ -97,7 +153,7 @@ async def main():
                                    reply_markup=builder.as_markup())
         else:
             await bot.send_message(CHANNEL, message.text, entities=message.entities)
-        await message.reply('Отправил пост в чат')
+        await message.reply('Отправил пост в канал')
 
     @dp.message(F.photo)
     async def send_photo(message: Message):
@@ -116,15 +172,14 @@ async def main():
                                  reply_markup=builder.as_markup())
         else:
             await bot.send_photo(CHANNEL, photo=message.photo[-1].file_id, caption=message.caption)
-        await message.reply('Отправил фото в чат')
+        await message.reply('Отправил фото в канал')
 
     @dp.message(F.sticker)
     async def send_sticker(message: Message):
         await bot.send_sticker(CHANNEL, sticker=message.sticker.file_id)
-        await message.reply('Отправил стикер в чат')
+        await message.reply('Отправил стикер в канал')
 
     await dp.start_polling(bot)
-
 
 if __name__ == "__main__":
     asyncio.run(main())
