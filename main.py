@@ -23,6 +23,7 @@ DEFAULT_DELAY = 0.6
 
 
 async def main():
+
     class MediaGroupMiddleware(BaseMiddleware):
         ALBUM_DATA: Dict[str, List[Message]] = {}
 
@@ -179,7 +180,13 @@ async def main():
         await bot.send_sticker(CHANNEL, sticker=message.sticker.file_id)
         await message.reply('Отправил стикер в канал')
 
+    @dp.message(F.animation)
+    async def send_gif(message: Message):
+        await bot.send_animation(CHANNEL, animation=message.animation.file_id)
+        await message.reply('Отправил гифку в канал')
+
     await dp.start_polling(bot)
+
 
 if __name__ == "__main__":
     asyncio.run(main())
